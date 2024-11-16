@@ -20,6 +20,17 @@ pub struct TokenizerEncodeResult {
     len: usize,
 }
 
+
+#[repr(C)]
+pub struct TokenizerEncodeExResult {
+    token_ids: *mut u32,
+    token_ids_len: usize,
+    token_type_ids: *mut u32,
+    token_type_ids_len: usize,
+    masks: *mut u32,
+    masks_len: usize,
+}
+
 impl TokenizerWrapper {
     pub fn from_str(json: &str) -> TokenizerWrapper {
         TokenizerWrapper {
@@ -90,6 +101,18 @@ impl TokenizerWrapper {
         let encoded = self.tokenizer.encode(text, add_special_tokens).unwrap();
         return encoded.get_ids().to_vec();
     }
+    pub fn encode_ex(&mut self, text: &str, add_special_tokens: bool) -> (Vec<i32>, Vec<i32>, Vec<i32>) {
+        let encoding = self.tokenizer.encode(text, add_special_tokens).unwrap();
+        return (encoding.get_ids().into_iter()
+                    .map(|x| (*x) as i32)
+                    .collect::<Vec<i32>>(),
+                encoding.get_type_ids().into_iter()
+                    .map(|x| (*x) as i32)
+                    .collect::<Vec<i32>>(),
+                encoding.get_attention_mask().into_iter()
+                    .map(|x| (*x) as i32)
+                    .collect::<Vec<i32>>());
+    }
 
     pub fn encode_batch(&mut self, texts: Vec<&str>, add_special_tokens: bool) -> Vec<Vec<u32>> {
         let results = self.tokenizer.encode_batch(texts, add_special_tokens).unwrap()
@@ -130,7 +153,7 @@ extern "C" fn byte_level_bpe_tokenizers_new_from_str(
             input_added_tokens_str,
             len_added_tokens,
         ))
-        .unwrap();
+            .unwrap();
         return Box::into_raw(Box::new(TokenizerWrapper::byte_level_bpe_from_str(
             vocab,
             merges,
@@ -154,6 +177,31 @@ extern "C" fn tokenizers_encode(
         *out_result = TokenizerEncodeResult {
             token_ids: Box::into_raw(encoded.into_boxed_slice()) as *mut u32,
             len: len,
+        };
+    }
+}
+
+#[no_mangle]
+extern "C" fn tokenizers_encode_ex(
+    handle: *mut TokenizerWrapper,
+    input_cstr: *const u8,
+    len: usize,
+    add_special_tokens: i32,
+    out_result: *mut TokenizerEncodeExResult,
+) {
+    unsafe {
+        let input_data = std::str::from_utf8(std::slice::from_raw_parts(input_cstr, len)).unwrap();
+        let (ids, mask, token_type_ids) = (*handle).encode_ex(input_data, add_special_tokens != 0);
+        let ids_len = ids.len();
+        let token_type_ids_len = token_type_ids.len();
+        let masks_len = mask.len();
+        *out_result = TokenizerEncodeExResult {
+            token_ids: Box::into_raw(ids.into_boxed_slice()) as *mut u32,
+            token_ids_len: ids_len,
+            token_type_ids: Box::into_raw(token_type_ids.into_boxed_slice()) as *mut u32,
+            token_type_ids_len,
+            masks: Box::into_raw(mask.into_boxed_slice()) as *mut u32,
+            masks_len,
         };
     }
 }
@@ -191,6 +239,17 @@ extern "C" fn tokenizers_free_encode_results(results: *mut TokenizerEncodeResult
         let slice = std::slice::from_raw_parts_mut(results, num_seqs);
         for result in &mut *slice {
             drop(Box::from_raw(std::slice::from_raw_parts_mut(result.token_ids, result.len)));
+        }
+    }
+}
+#[no_mangle]
+extern "C" fn tokenizers_free_encode_ex_results(results: *mut TokenizerEncodeExResult, num_seqs: usize) {
+    unsafe {
+        let slice = std::slice::from_raw_parts_mut(results, num_seqs);
+        for result in &mut *slice {
+            drop(Box::from_raw(std::slice::from_raw_parts_mut(result.token_ids, result.token_ids_len)));
+            drop(Box::from_raw(std::slice::from_raw_parts_mut(result.token_type_ids, result.token_type_ids_len)));
+            drop(Box::from_raw(std::slice::from_raw_parts_mut(result.masks, result.masks_len)));
         }
     }
 }

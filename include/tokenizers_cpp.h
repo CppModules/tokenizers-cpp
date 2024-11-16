@@ -19,6 +19,14 @@ namespace tokenizers {
  */
 class Tokenizer {
  public:
+
+  struct EncodeResult {
+    std::vector<int> TokenIds;
+    std::vector<int> TokenTypeIds;
+    std::vector<int> Masks;
+
+  };
+
   /*! \brief virtual destructor */
   virtual ~Tokenizer() {}
 
@@ -27,19 +35,21 @@ class Tokenizer {
    * \param text The input text.
    * \returns The encoded token ids.
    */
-  virtual std::vector<int32_t> Encode(const std::string& text) = 0;
+  virtual std::vector<int32_t> Encode(const std::string& text,bool add_special_tokens) = 0;
+
+  virtual EncodeResult EncodeEx(const std::string& text,bool add_special_tokens) = 0;
 
   /*!
    * \brief Encode a batch of texts into ids.
    * \param texts The input texts.
    * \returns The encoded token ids.
    */
-  virtual std::vector<std::vector<int32_t>> EncodeBatch(const std::vector<std::string>& texts) {
+  virtual std::vector<std::vector<int32_t>> EncodeBatch(const std::vector<std::string>& texts,bool add_special_tokens) {
     // Fall back when the derived class does not implement this function.
     std::vector<std::vector<int32_t>> ret;
     ret.reserve(texts.size());
     for (const auto& text : texts) {
-      ret.push_back(Encode(text));
+      ret.push_back(Encode(text,add_special_tokens));
     }
     return ret;
   }
@@ -103,7 +113,7 @@ class Tokenizer {
    * \param model_blob The blob that contains vocabs.
    * \return The created tokenizer.
    */
-  static std::unique_ptr<Tokenizer> FromBlobRWKVWorld(const std::string& model_blob);
+//  static std::unique_ptr<Tokenizer> FromBlobRWKVWorld(const std::string& model_blob);
 };
 
 }  // namespace tokenizers

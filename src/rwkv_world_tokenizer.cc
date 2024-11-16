@@ -83,7 +83,8 @@ class RWKVWorldTokenizer : public Tokenizer {
     _tree = std::make_unique<TrieTree>(_word2idx);
   }
 
-  std::vector<int32_t> Encode(const std::string& str) final {
+  std::vector<int32_t> Encode(const std::string& str,
+                              bool add_special_tokens) {
     std::vector<int> ids;
     int str_idx = 0;
 
@@ -136,8 +137,8 @@ class RWKVWorldTokenizer : public Tokenizer {
   std::unique_ptr<TrieTree> _tree;
 };
 
-std::unique_ptr<Tokenizer> Tokenizer::FromBlobRWKVWorld(const std::string& model_blob) {
-  return std::make_unique<RWKVWorldTokenizer>(model_blob);
-}
+//std::unique_ptr<Tokenizer> Tokenizer::FromBlobRWKVWorld(const std::string& model_blob) {
+//  return std::make_unique<RWKVWorldTokenizer>(model_blob);
+//}
 
 }  // namespace tokenizers

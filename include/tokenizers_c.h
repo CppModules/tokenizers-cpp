@@ -21,6 +21,15 @@ typedef struct {
     size_t len;
 } TokenizerEncodeResult;
 
+typedef struct {
+    int* token_ids;
+    size_t token_ids_len;
+    int* token_type_ids;
+    size_t token_type_ids_len;
+    int* masks;
+    size_t masks_len;
+} TokenizerEncodeExResult;
+
 TokenizerHandle tokenizers_new_from_str(const char* json, size_t len);
 
 TokenizerHandle byte_level_bpe_tokenizers_new_from_str(const char* vocab, size_t vocab_len,
@@ -29,11 +38,13 @@ TokenizerHandle byte_level_bpe_tokenizers_new_from_str(const char* vocab, size_t
                                                        size_t added_tokens_len);
 
 void tokenizers_encode(TokenizerHandle handle, const char* data, size_t len, int add_special_token, TokenizerEncodeResult* result);
+void tokenizers_encode_ex(TokenizerHandle handle, const char* data, size_t len, int add_special_token, TokenizerEncodeExResult* result);
 
 void tokenizers_encode_batch(TokenizerHandle handle, const char** data, size_t* len, size_t num_seqs,
                                  int add_special_token, TokenizerEncodeResult* results);
 
 void tokenizers_free_encode_results(TokenizerEncodeResult* results, size_t num_seqs);
+void tokenizers_free_encode_ex_results(TokenizerEncodeExResult* results, size_t num_seqs);
 
 void tokenizers_decode(TokenizerHandle handle, const uint32_t* data, size_t len,
                        int skip_special_token);
