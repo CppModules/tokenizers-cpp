@@ -118,14 +118,14 @@ set(
   src/huggingface_tokenizer.cc
   src/rwkv_world_tokenizer.cc
 )
-add_library(tokenizer_cpp_objs OBJECT ${TOKENIZER_CPP_SRCS})
-target_include_directories(tokenizer_cpp_objs PRIVATE sentencepiece/src)
-target_include_directories(tokenizer_cpp_objs PRIVATE msgpack/include)
-target_include_directories(tokenizer_cpp_objs PUBLIC ${TOKENIZERS_CPP_INCLUDE})
-if (MLC_ENABLE_SENTENCEPIECE_TOKENIZER STREQUAL "ON")
-  target_compile_definitions(tokenizer_cpp_objs PUBLIC MLC_ENABLE_SENTENCEPIECE_TOKENIZER)
-endif ()
-target_link_libraries(tokenizer_cpp_objs PRIVATE msgpack-cxx)
+#add_library(tokenizer_cpp_objs OBJECT ${TOKENIZER_CPP_SRCS})
+#target_include_directories(tokenizer_cpp_objs PRIVATE sentencepiece/src)
+#target_include_directories(tokenizer_cpp_objs PRIVATE msgpack/include)
+#target_include_directories(tokenizer_cpp_objs PUBLIC ${TOKENIZERS_CPP_INCLUDE})
+#if (MLC_ENABLE_SENTENCEPIECE_TOKENIZER STREQUAL "ON")
+#  target_compile_definitions(tokenizer_cpp_objs PUBLIC MLC_ENABLE_SENTENCEPIECE_TOKENIZER)
+#endif ()
+#target_link_libraries(tokenizer_cpp_objs PRIVATE msgpack-cxx)
 
 # sentencepiece config
 option(SPM_ENABLE_SHARED "override sentence piece config" OFF)
@@ -144,6 +144,16 @@ add_subdirectory(sentencepiece sentencepiece EXCLUDE_FROM_ALL)
 add_library(tokenizers_c INTERFACE ${TOKENIZERS_RUST_LIB})
 target_link_libraries(tokenizers_c INTERFACE ${TOKENIZERS_RUST_LIB} ${TOKENIZERS_C_LINK_LIBS})
 
-add_library(tokenizers_cpp STATIC $<TARGET_OBJECTS:tokenizer_cpp_objs>)
+#add_library(tokenizers_cpp STATIC tokenizer_cpp_objs)
+
+add_library(tokenizers_cpp STATIC ${TOKENIZER_CPP_SRCS})
+target_include_directories(tokenizers_cpp PRIVATE sentencepiece/src)
+target_include_directories(tokenizers_cpp PRIVATE msgpack/include)
+target_include_directories(tokenizers_cpp PUBLIC ${TOKENIZERS_CPP_INCLUDE})
+if (MLC_ENABLE_SENTENCEPIECE_TOKENIZER STREQUAL "ON")
+  target_compile_definitions(tokenizers_cpp PUBLIC MLC_ENABLE_SENTENCEPIECE_TOKENIZER)
+endif ()
+target_link_libraries(tokenizers_cpp PRIVATE msgpack-cxx)
+
 target_link_libraries(tokenizers_cpp PRIVATE tokenizers_c sentencepiece-static ${TOKENIZERS_CPP_LINK_LIBS})
 target_include_directories(tokenizers_cpp PUBLIC ${TOKENIZERS_CPP_INCLUDE})
