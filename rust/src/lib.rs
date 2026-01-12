@@ -46,8 +46,7 @@ impl TokenizerWrapper {
         added_tokens: &str,
     ) -> TokenizerWrapper {
         let vocab_json: Value = serde_json::from_str(vocab).unwrap();
-        let added_tokens_json: Value = serde_json::from_str(added_tokens).unwrap();
-        let mut vocab = HashMap::new();
+        let mut vocab = ahash::AHashMap::new();
         match vocab_json {
             Value::Object(m) => {
                 for (token, id) in m {
@@ -59,16 +58,19 @@ impl TokenizerWrapper {
             }
             _ => panic!("Invalid vocab.json file."),
         };
-        match added_tokens_json {
-            Value::Object(m) => {
-                for (token, id) in m {
-                    if let Value::Number(id) = id {
-                        let id = id.as_u64().unwrap() as u32;
-                        vocab.insert(token, id);
-                    }
-                }
-            }
-            _ => panic!("Invalid added_tokens.json file."),
+                if !added_tokens.is_empty() {
+                    let added_tokens_json: Value = serde_json::from_str(added_tokens).unwrap();
+                    match added_tokens_json {
+                        Value::Object(m) => {
+                            for (token, id) in m {
+                                if let Value::Number(id) = id {
+                                    let id = id.as_u64().unwrap() as u32;
+                                    vocab.insert(token, id);
+                                }
+                            }
+                        }
+                        _ => panic!("Invalid added_tokens.json file."),
+                    };
         }
 
         let merges = merges
@@ -88,8 +90,8 @@ impl TokenizerWrapper {
         );
         let mut tokenizer = Tokenizer::new(BPE::new(vocab, merges));
         tokenizer
-            .with_pre_tokenizer(byte_level)
-            .with_decoder(byte_level);
+            .with_pre_tokenizer(Some(byte_level))
+            .with_decoder(Some(byte_level));
         TokenizerWrapper {
             tokenizer: tokenizer,
             decode_str: String::new(),
@@ -101,18 +103,14 @@ impl TokenizerWrapper {
         let encoded = self.tokenizer.encode(text, add_special_tokens).unwrap();
         return encoded.get_ids().to_vec();
     }
-    pub fn encode_ex(&mut self, text: &str, add_special_tokens: bool) -> (Vec<i32>, Vec<i32>, Vec<i32>) {
-        let encoding = self.tokenizer.encode(text, add_special_tokens).unwrap();
-        return (encoding.get_ids().into_iter()
-                    .map(|x| (*x) as i32)
-                    .collect::<Vec<i32>>(),
-                encoding.get_type_ids().into_iter()
-                    .map(|x| (*x) as i32)
-                    .collect::<Vec<i32>>(),
-                encoding.get_attention_mask().into_iter()
-                    .map(|x| (*x) as i32)
-                    .collect::<Vec<i32>>());
-    }
+    pub fn encode_ex(&mut self, text: &str, add_special_tokens: bool) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+            let encoding = self.tokenizer.encode(text, add_special_tokens).unwrap();
+            return (
+                encoding.get_ids().to_vec(),
+                encoding.get_type_ids().to_vec(),
+                encoding.get_attention_mask().to_vec()
+            );
+        }
 
     pub fn encode_batch(&mut self, texts: Vec<&str>, add_special_tokens: bool) -> Vec<Vec<u32>> {
         let results = self.tokenizer.encode_batch(texts, add_special_tokens).unwrap()
@@ -130,7 +128,7 @@ impl TokenizerWrapper {
 #[no_mangle]
 extern "C" fn tokenizers_new_from_str(input_cstr: *const u8, len: usize) -> *mut TokenizerWrapper {
     unsafe {
-        let json = std::str::from_utf8(std::slice::from_raw_parts(input_cstr, len)).unwrap();
+        let json = &String::from_utf8_lossy(std::slice::from_raw_parts(input_cstr, len));
         return Box::into_raw(Box::new(TokenizerWrapper::from_str(json)));
     }
 }
@@ -146,14 +144,13 @@ extern "C" fn byte_level_bpe_tokenizers_new_from_str(
 ) -> *mut TokenizerWrapper {
     unsafe {
         let vocab =
-            std::str::from_utf8(std::slice::from_raw_parts(input_vocab_str, len_vocab)).unwrap();
+            &String::from_utf8_lossy(std::slice::from_raw_parts(input_vocab_str, len_vocab));
         let merges =
-            std::str::from_utf8(std::slice::from_raw_parts(input_merges_str, len_merges)).unwrap();
-        let added_tokens = std::str::from_utf8(std::slice::from_raw_parts(
+            &String::from_utf8_lossy(std::slice::from_raw_parts(input_merges_str, len_merges));
+        let added_tokens = &String::from_utf8_lossy(std::slice::from_raw_parts(
             input_added_tokens_str,
             len_added_tokens,
-        ))
-            .unwrap();
+        ));
         return Box::into_raw(Box::new(TokenizerWrapper::byte_level_bpe_from_str(
             vocab,
             merges,
@@ -191,17 +188,20 @@ extern "C" fn tokenizers_encode_ex(
 ) {
     unsafe {
         let input_data = std::str::from_utf8(std::slice::from_raw_parts(input_cstr, len)).unwrap();
-        let (ids, mask, token_type_ids) = (*handle).encode_ex(input_data, add_special_tokens != 0);
+
+        let (ids, token_type_ids, mask) = (*handle).encode_ex(input_data, add_special_tokens != 0);
+
         let ids_len = ids.len();
         let token_type_ids_len = token_type_ids.len();
         let masks_len = mask.len();
+
         *out_result = TokenizerEncodeExResult {
             token_ids: Box::into_raw(ids.into_boxed_slice()) as *mut u32,
             token_ids_len: ids_len,
             token_type_ids: Box::into_raw(token_type_ids.into_boxed_slice()) as *mut u32,
-            token_type_ids_len,
+            token_type_ids_len: token_type_ids_len,
             masks: Box::into_raw(mask.into_boxed_slice()) as *mut u32,
-            masks_len,
+            masks_len: masks_len,
         };
     }
 }
@@ -242,14 +242,22 @@ extern "C" fn tokenizers_free_encode_results(results: *mut TokenizerEncodeResult
         }
     }
 }
+
 #[no_mangle]
 extern "C" fn tokenizers_free_encode_ex_results(results: *mut TokenizerEncodeExResult, num_seqs: usize) {
     unsafe {
         let slice = std::slice::from_raw_parts_mut(results, num_seqs);
-        for result in &mut *slice {
-            drop(Box::from_raw(std::slice::from_raw_parts_mut(result.token_ids, result.token_ids_len)));
-            drop(Box::from_raw(std::slice::from_raw_parts_mut(result.token_type_ids, result.token_type_ids_len)));
-            drop(Box::from_raw(std::slice::from_raw_parts_mut(result.masks, result.masks_len)));
+
+        for result in slice {
+            if !result.token_ids.is_null() {
+                let _ = Vec::from_raw_parts(result.token_ids, result.token_ids_len, result.token_ids_len);
+            }
+            if !result.token_type_ids.is_null() {
+                let _ = Vec::from_raw_parts(result.token_type_ids, result.token_type_ids_len, result.token_type_ids_len);
+            }
+            if !result.masks.is_null() {
+                let _ = Vec::from_raw_parts(result.masks, result.masks_len, result.masks_len);
+            }
         }
     }
 }
@@ -275,7 +283,7 @@ extern "C" fn tokenizers_get_decode_str(
 ) {
     unsafe {
         *out_cstr = (*handle).decode_str.as_mut_ptr();
-        *out_len = (*handle).decode_str.len();
+        *out_len = (&(*handle).decode_str).len();
     }
 }
 
@@ -308,7 +316,7 @@ extern "C" fn tokenizers_id_to_token(
         };
 
         *out_cstr = (*handle).id_to_token_result.as_mut_ptr();
-        *out_len = (*handle).id_to_token_result.len();
+        *out_len = (&(*handle).id_to_token_result).len();
     }
 }
 
@@ -320,7 +328,7 @@ extern "C" fn tokenizers_token_to_id(
     out_id: *mut i32,
 ) {
     unsafe {
-        let token: &str = std::str::from_utf8(std::slice::from_raw_parts(token, len)).unwrap();
+        let token: &str = &String::from_utf8_lossy(std::slice::from_raw_parts(token, len));
         let id = (*handle).tokenizer.token_to_id(token);
         *out_id = match id {
             Some(id) => id as i32,
