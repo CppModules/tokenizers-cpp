@@ -17,16 +17,16 @@ extern "C" {
 typedef void* TokenizerHandle;
 
 typedef struct {
-    int* token_ids;
+    uint32_t* token_ids;
     size_t len;
 } TokenizerEncodeResult;
 
 typedef struct {
-    int* token_ids;
+    uint32_t* token_ids;
     size_t token_ids_len;
-    int* token_type_ids;
+    uint32_t* token_type_ids;
     size_t token_type_ids_len;
-    int* masks;
+    uint32_t* masks;
     size_t masks_len;
 } TokenizerEncodeExResult;
 
