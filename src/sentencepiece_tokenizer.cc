@@ -17,10 +17,17 @@ class SentencePieceTokenizer : public Tokenizer {
     sentence_piece_.LoadFromSerializedProto(model_blob);
   }
 
-  std::vector<int32_t> Encode(const std::string& text) final {
+  std::vector<int32_t> Encode(const std::string& text, bool add_special_tokens) final {
     std::vector<int32_t> tokens;
     sentence_piece_.Encode(text, &tokens).IgnoreError();
     return tokens;
+  }
+
+  EncodeResult EncodeEx(const std::string& text, bool add_special_tokens) final {
+    std::vector<int32_t> ids = Encode(text, add_special_tokens);
+    std::vector<int> token_type_ids(ids.size(), 0);
+    std::vector<int> masks(ids.size(), 1);
+    return {std::vector<int>(ids.begin(), ids.end()), token_type_ids, masks};
   }
 
   std::string Decode(const std::vector<int32_t>& ids) final {
